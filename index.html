@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Scratch雑談SNS</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap');
+
+body {
+  font-family: 'Kosugi Maru', sans-serif;
+  background: #f9f9f9;
+  margin: 20px;
+}
+
+.container {
+  max-width: 600px;
+  margin: auto;
+}
+
+.comment-box {
+  background: white;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 10px;
+}
+
+.name {
+  font-weight: bold;
+}
+
+.time {
+  color: gray;
+  font-size: 12px;
+}
+
+textarea {
+  width: 100%;
+  height: 60px;
+  padding: 8px;
+}
+
+input {
+  width: 100%;
+  padding: 8px;
+}
+
+button {
+  padding: 8px 12px;
+  margin-top: 5px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>雑談所</h2>
+
+<input id="name" placeholder="名前"><br><br>
+
+<textarea id="message" placeholder="メッセージを入力"></textarea><br>
+
+<button id="postBtn" onclick="post()" disabled>送信</button>
+
+<div id="posts"></div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { 
+  getFirestore, collection, addDoc, query, orderBy, onSnapshot 
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
+  authDomain: "scratch-sns.firebaseapp.com",
+  projectId: "scratch-sns"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const nameInput = document.getElementById("name");
+const messageInput = document.getElementById("message");
+const postBtn = document.getElementById("postBtn");
+
+// 名前保存
+nameInput.value = localStorage.getItem("name") || "";
+
+nameInput.addEventListener("input", () => {
+  localStorage.setItem("name", nameInput.value);
+  check();
+});
+
+messageInput.addEventListener("input", check);
+
+// 入力チェック
+function check() {
+  if (nameInput.value && messageInput.value) {
+    postBtn.disabled = false;
+  } else {
+    postBtn.disabled = true;
+  }
+}
+
+// 投稿
+async function post() {
+  const name = nameInput.value;
+  const message = messageInput.value;
+
+  await addDoc(collection(db, "posts"), {
+    name: name,
+    message: message,
+    time: Date.now()
+  });
+
+  messageInput.value = "";
+  check();
+}
+
+window.post = post;
+
+// 時間フォーマット
+function formatTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleString();
+}
+
+// 表示
+const q = query(collection(db, "posts"), orderBy("time", "desc"));
+
+onSnapshot(q, (snapshot) => {
+  const postsDiv = document.getElementById("posts");
+  postsDiv.innerHTML = "";
+
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    postsDiv.innerHTML += `
+      <div class="comment-box">
+        <div class="name">${data.name}</div>
+        <div>${data.message}</div>
+        <div class="time">${formatTime(data.time)}</div>
+      </div>
+    `;
+  });
+});
+</script>
+
+</body>
+</html>
