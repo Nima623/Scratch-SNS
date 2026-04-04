@@ -5,17 +5,35 @@
 <title>Scratch雑談SNS</title>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap');
-
 body {
   font-family: 'Kosugi Maru', sans-serif;
   background: #f9f9f9;
   margin: 20px;
 }
 
+.topbar {
+  display: flex;
+  justify-content: space-between;
+}
+
+.auth-buttons button {
+  margin-left: 5px;
+}
+
 .container {
   max-width: 600px;
   margin: auto;
+}
+
+textarea {
+  width: 100%;
+  height: 60px;
+  padding: 8px;
+}
+
+button {
+  padding: 6px 10px;
+  cursor: pointer;
 }
 
 .comment-box {
@@ -34,45 +52,51 @@ body {
   font-size: 12px;
 }
 
-textarea {
-  width: 100%;
-  height: 60px;
-  padding: 8px;
-}
-
-input {
-  width: 100%;
-  padding: 8px;
-}
-
-button {
-  padding: 8px 12px;
-  margin-top: 5px;
+/* 通知 */
+#toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: black;
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  opacity: 0;
+  transition: 1s;
 }
 </style>
 </head>
 
 <body>
 
+<div class="topbar">
+  <h2>雑談所</h2>
+  <div class="auth-buttons">
+    <button onclick="register()">アカウント登録</button>
+    <button onclick="login()">サインイン</button>
+  </div>
+</div>
+
 <div class="container">
 
-<h2>雑談所</h2>
-
-<input id="name" placeholder="名前"><br><br>
-
 <textarea id="message" placeholder="メッセージを入力"></textarea><br>
-
-<button id="postBtn" onclick="post()" disabled>送信</button>
+<button onclick="post()">送信</button>
 
 <div id="posts"></div>
 
 </div>
+
+<div id="toast"></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { 
   getFirestore, collection, addDoc, query, orderBy, onSnapshot 
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+import { 
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged 
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
@@ -82,54 +106,83 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
 
-const nameInput = document.getElementById("name");
-const messageInput = document.getElementById("message");
-const postBtn = document.getElementById("postBtn");
+let currentUser = null;
 
-// 名前保存
-nameInput.value = localStorage.getItem("name") || "";
+// 🔔 トースト
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.style.opacity = "1";
+  setTimeout(() => {
+    t.style.opacity = "0";
+  }, 1000);
+}
 
-nameInput.addEventListener("input", () => {
-  localStorage.setItem("name", nameInput.value);
-  check();
-});
+// 🔐 登録
+window.register = async function() {
+  const email = prompt("ユーザー名（メール形式）");
+  const pass = prompt("パスワード");
 
-messageInput.addEventListener("input", check);
+  if (!email || !pass) return;
 
-// 入力チェック
-function check() {
-  if (nameInput.value && messageInput.value) {
-    postBtn.disabled = false;
-  } else {
-    postBtn.disabled = true;
+  try {
+    await createUserWithEmailAndPassword(auth, email, pass);
+    showToast("登録成功！");
+  } catch (e) {
+    showToast("登録失敗");
   }
 }
 
+// 🔑 ログイン
+window.login = async function() {
+  const email = prompt("ユーザー名");
+  const pass = prompt("パスワード");
+
+  if (!email || !pass) return;
+
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+    showToast("ログイン成功！");
+  } catch {
+    showToast("ログイン失敗");
+  }
+}
+
+// 🔄 ログイン状態維持
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+});
+
 // 投稿
-async function post() {
-  const name = nameInput.value;
-  const message = messageInput.value;
+window.post = async function() {
+  const message = document.getElementById("message").value;
+
+  if (!currentUser) {
+    showToast("ログインして！");
+    return;
+  }
+
+  if (!message) {
+    showToast("メッセージを入力して！");
+    return;
+  }
 
   await addDoc(collection(db, "posts"), {
-    name: name,
+    name: currentUser.email,
     message: message,
     time: Date.now()
   });
 
-  messageInput.value = "";
-  check();
-}
-
-window.post = post;
-
-// 時間フォーマット
-function formatTime(ms) {
-  const d = new Date(ms);
-  return d.toLocaleString();
+  document.getElementById("message").value = "";
 }
 
 // 表示
+function formatTime(ms) {
+  return new Date(ms).toLocaleString();
+}
+
 const q = query(collection(db, "posts"), orderBy("time", "desc"));
 
 onSnapshot(q, (snapshot) => {
@@ -137,12 +190,12 @@ onSnapshot(q, (snapshot) => {
   postsDiv.innerHTML = "";
 
   snapshot.forEach((doc) => {
-    const data = doc.data();
+    const d = doc.data();
     postsDiv.innerHTML += `
       <div class="comment-box">
-        <div class="name">${data.name}</div>
-        <div>${data.message}</div>
-        <div class="time">${formatTime(data.time)}</div>
+        <div class="name">${d.name}</div>
+        <div>${d.message}</div>
+        <div class="time">${formatTime(d.time)}</div>
       </div>
     `;
   });
