@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Scratch雑談SNS</title>
+
+<style>
+body { margin:0; font-family:Arial; background:#f7f7f7; }
+
+/* 上バー */
+.topbar {
+  background:#ffab19;
+  padding:10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.container {
+  max-width:600px;
+  margin:20px auto;
+}
+
+/* 投稿欄 */
+.post-box {
+  background:white;
+  padding:10px;
+  border-radius:8px;
+}
+
+textarea {
+  width:100%;
+  height:70px;
+}
+
+/* 投稿 */
+.comment {
+  background:white;
+  padding:10px;
+  margin-top:10px;
+  border-radius:8px;
+}
+
+.small { font-size:12px; color:gray; }
+
+button { cursor:pointer; margin-top:5px; }
+
+#toast {
+  position:fixed;
+  top:20px;
+  right:20px;
+  background:black;
+  color:white;
+  padding:10px;
+  opacity:0;
+  transition:1s;
+}
+</style>
+</head>
+
+<body>
+
+<div class="topbar">
+  <h2>雑談所</h2>
+
+  <div id="userArea">
+    <input id="username" placeholder="ユーザー名">
+    <button onclick="login()">OK</button>
+  </div>
+</div>
+
+<div class="container">
+
+<div class="post-box">
+<textarea id="msg" maxlength="150" placeholder="メッセージを入力"></textarea>
+<div class="small" id="count">残り150文字</div>
+<button onclick="post()">送信</button>
+</div>
+
+<div id="posts"></div>
+
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import { 
+  getFirestore, collection, addDoc, query, where, getDocs,
+  onSnapshot, orderBy, updateDoc, doc, deleteDoc 
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+/* 🔥 ここを自分のにする */
+const firebaseConfig = {
+  apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
+  authDomain: "scratch-sns.firebaseapp.com",
+  projectId: "scratch-sns",
+  storageBucket: "scratch-sns.firebasestorage.app",
+  messagingSenderId: "414045447005",
+  appId: "1:414045447005:web:f4710d0a90a43745fcbeb4"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let currentUser = localStorage.getItem("username") || null;
+
+// 通知
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg;
+  t.style.opacity=1;
+  setTimeout(()=>t.style.opacity=0,1000);
+}
+
+// 文字数
+const msgBox=document.getElementById("msg");
+msgBox.addEventListener("input",()=>{
+  document.getElementById("count").textContent="残り"+(150-msgBox.value.length)+"文字";
+});
+
+// ログイン
+window.login = async ()=>{
+  const name = document.getElementById("username").value;
+
+  if(!name){ toast("名前入力して"); return;}
+
+  const q = query(collection(db,"users"), where("username","==",name));
+  const snap = await getDocs(q);
+
+  if(snap.empty){
+    await addDoc(collection(db,"users"),{username:name});
+    toast("登録完了");
+  } else {
+    toast("ログイン");
+  }
+
+  currentUser = name;
+  localStorage.setItem("username",name);
+  updateUI();
+};
+
+// UI更新
+function updateUI(){
+  const area=document.getElementById("userArea");
+
+  if(currentUser){
+    area.innerHTML = `
+      ${currentUser}
+      <button onclick="logout()">ログアウト</button>
+    `;
+  }
+}
+updateUI();
+
+// ログアウト
+window.logout = ()=>{
+  localStorage.removeItem("username");
+  location.reload();
+};
+
+// 投稿
+window.post = async ()=>{
+  const msg = msgBox.value;
+
+  if(!currentUser){ toast("ログインして"); return;}
+  if(!msg){ toast("入力して"); return;}
+
+  await addDoc(collection(db,"posts"),{
+    name: currentUser,
+    message: msg,
+    likes: [],
+    time: Date.now()
+  });
+
+  msgBox.value="";
+  document.getElementById("count").textContent="残り150文字";
+};
+
+// いいね
+window.like = async (id, likes)=>{
+  if(!currentUser){ toast("ログインして"); return;}
+
+  let newLikes = likes || [];
+
+  if(newLikes.includes(currentUser)){
+    newLikes = newLikes.filter(u => u !== currentUser);
+  } else {
+    newLikes.push(currentUser);
+  }
+
+  await updateDoc(doc(db,"posts",id),{
+    likes:newLikes
+  });
+};
+
+// 削除
+window.del = async (id)=>{
+  await deleteDoc(doc(db,"posts",id));
+};
+
+// 表示
+onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
+  const div=document.getElementById("posts");
+  div.innerHTML="";
+
+  snap.forEach(d=>{
+    const data=d.data();
+    const id=d.id;
+
+    const liked = data.likes?.includes(currentUser);
+
+    div.innerHTML+=`
+      <div class="comment">
+        <b>${data.name}</b><br>
+        ${data.message}<br>
+
+        👍 ${data.likes ? data.likes.length : 0}
+        <button onclick="like('${id}',${JSON.stringify(data.likes||[])})">
+          ${liked ? "いいね解除" : "いいね"}
+        </button>
+
+        ${currentUser===data.name ? `<button onclick="del('${id}')">削除</button>`:""}
+      </div>
+    `;
+  });
+});
+</script>
+
+</body>
+</html>
