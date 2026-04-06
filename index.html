@@ -7,11 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap" rel="stylesheet">
 
 <style>
-body {
-  margin:0;
-  font-family:'Kosugi Maru', sans-serif;
-  background:#f7f7f7;
-}
+body { margin:0; font-family:'Kosugi Maru', sans-serif; background:#f7f7f7; }
 
 .topbar {
   background:#ffab19;
@@ -20,21 +16,31 @@ body {
   justify-content:space-between;
 }
 
-.container {
-  max-width:600px;
-  margin:20px auto;
+/* ログインボックス */
+.login-box {
+  background:white;
+  padding:8px;
+  border-radius:8px;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  width:130px;
 }
 
-textarea {
-  width:100%;
-  height:80px;
-}
+.container { max-width:600px; margin:20px auto; }
+
+textarea { width:100%; height:80px; }
 
 .comment {
   background:white;
   padding:10px;
   margin-top:10px;
   border-radius:8px;
+}
+
+.time {
+  font-size:12px;
+  color:gray;
 }
 
 #toast {
@@ -48,10 +54,6 @@ textarea {
   opacity:0;
   transition:1s;
 }
-
-.small-box input {
-  width:90px;
-}
 </style>
 </head>
 
@@ -60,7 +62,7 @@ textarea {
 <div class="topbar">
   <b>雑談所</b>
 
-  <div id="userArea" class="small-box">
+  <div id="userArea" class="login-box">
     <input id="username" placeholder="ユーザー名">
     <input id="password" type="password" placeholder="パスワード">
     <button onclick="login()">登録/ログイン</button>
@@ -86,7 +88,7 @@ import {
   onSnapshot, orderBy, updateDoc, doc, deleteDoc
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-/* 🔥 自分のfirebaseConfigに変更 */
+/* 🔥 自分の設定にする */
 const firebaseConfig = {
   apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
   authDomain: "scratch-sns.firebaseapp.com",
@@ -100,8 +102,6 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 let currentUser = localStorage.getItem("username") || null;
-
-/* 管理者 */
 const adminUser = "Hiromu0623";
 
 /* 通知 */
@@ -109,19 +109,25 @@ function toast(msg){
   const t=document.getElementById("toast");
   t.textContent=msg;
   t.style.opacity=1;
-  setTimeout(()=>t.style.opacity=0,1000);
+  setTimeout(()=>t.style.opacity=0,1500);
 }
 
 /* NGワード */
-const ngWords = ["死ね","バカ","キモい","エロ","うざい"];
+const ngWords=["死ね","バカ","キモい","エロ","うざい"];
 function checkNG(text){
   return ngWords.some(w=>text.includes(w));
 }
 
+/* 時間フォーマット */
+function formatTime(t){
+  const d=new Date(t);
+  return d.toLocaleString();
+}
+
 /* ログイン */
-window.login = async ()=>{
-  const name=document.getElementById("username").value;
-  const pass=document.getElementById("password").value;
+window.login=async()=>{
+  const name=username.value;
+  const pass=password.value;
 
   if(!name||!pass){
     toast("ユーザー名とパスワードを入力してください。");
@@ -132,23 +138,18 @@ window.login = async ()=>{
   const snap=await getDocs(q);
 
   if(snap.empty){
-    await addDoc(collection(db,"users"),{
-      username:name,
-      password:pass
-    });
+    await addDoc(collection(db,"users"),{username:name,password:pass});
     toast("アカウントを登録しました。");
   }else{
     let ok=false;
     snap.forEach(d=>{
       if(d.data().password===pass) ok=true;
     });
-
     if(!ok){
       toast("パスワードが違います。");
       return;
     }
-
-    toast("ログインしました。");
+    toast("サインインしました。");
   }
 
   currentUser=name;
@@ -176,7 +177,7 @@ window.logout=()=>{
 };
 
 /* 投稿 */
-window.post=async ()=>{
+window.post=async()=>{
   const msg=document.getElementById("msg").value;
 
   if(!currentUser){
@@ -201,38 +202,43 @@ window.post=async ()=>{
     time:Date.now()
   });
 
-  document.getElementById("msg").value="";
+  msg.value="";
 };
 
-/* いいね */
-window.like=async(id,likes)=>{
+/* 👍 いいね（完全修正） */
+window.like=async(id)=>{
   if(!currentUser){
     toast("サインインしてください。");
     return;
   }
 
-  let newLikes=likes||[];
+  const ref=doc(db,"posts",id);
+  const snap=await getDocs(query(collection(db,"posts"),where("__name__","==",id)));
 
-  if(newLikes.includes(currentUser)){
-    newLikes=newLikes.filter(u=>u!==currentUser);
-  }else{
-    newLikes.push(currentUser);
-  }
+  snap.forEach(d=>{
+    let likes=d.data().likes||[];
 
-  await updateDoc(doc(db,"posts",id),{
-    likes:newLikes
+    if(likes.includes(currentUser)){
+      likes=likes.filter(u=>u!==currentUser);
+    }else{
+      likes.push(currentUser);
+    }
+
+    updateDoc(ref,{likes:likes});
   });
 };
 
 /* 削除 */
-window.del=async(id)=>{
+window.del=async(id,owner)=>{
+  if(currentUser===adminUser && currentUser!==owner){
+    toast("管理者によりメッセージが削除されました。");
+  }
   await deleteDoc(doc(db,"posts",id));
 };
 
 /* 表示 */
 onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
-  const div=document.getElementById("posts");
-  div.innerHTML="";
+  posts.innerHTML="";
 
   snap.forEach(d=>{
     const data=d.data();
@@ -240,19 +246,20 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
 
     const liked=data.likes?.includes(currentUser);
 
-    div.innerHTML+=`
+    posts.innerHTML+=`
       <div class="comment">
-        <b>${data.name}</b><br>
+        <b>${data.name}</b>
+        <div class="time">${formatTime(data.time)}</div>
         ${data.message}<br>
 
         👍 ${data.likes?.length||0}
-        <button onclick="like('${id}',${JSON.stringify(data.likes||[])})">
+        <button onclick="like('${id}')">
           ${liked?"いいね解除":"いいね"}
         </button>
 
         ${
           currentUser===data.name || currentUser===adminUser
-          ? `<button onclick="del('${id}')">削除</button>`
+          ? `<button onclick="del('${id}','${data.name}')">削除</button>`
           : ""
         }
       </div>
