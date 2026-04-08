@@ -7,16 +7,27 @@
 <link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap" rel="stylesheet">
 
 <style>
-body { margin:0; font-family:'Kosugi Maru', sans-serif; background:#f7f7f7; }
+body {
+  margin:0;
+  font-family:'Kosugi Maru', sans-serif;
+  background:#f7f7f7;
+}
 
+/* 上バー */
 .topbar {
   background:#ffab19;
-  padding:10px 15px;
+  padding:10px;
   display:flex;
   justify-content:space-between;
   align-items:center;
 }
 
+/* ボタンカーソル */
+button {
+  cursor:pointer;
+}
+
+/* ログインBOX */
 #loginBox {
   display:none;
   position:absolute;
@@ -36,9 +47,29 @@ body { margin:0; font-family:'Kosugi Maru', sans-serif; background:#f7f7f7; }
   padding:6px;
 }
 
-.container { max-width:650px; margin:20px auto; }
+/* 管理者パネル */
+#adminPanel {
+  display:none;
+  position:fixed;
+  top:100px;
+  left:50%;
+  transform:translateX(-50%);
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  width:300px;
+}
 
-textarea { width:100%; height:100px; }
+/* メイン */
+.container {
+  max-width:600px;
+  margin:20px auto;
+}
+
+textarea {
+  width:100%;
+  height:100px;
+}
 
 .comment {
   background:white;
@@ -47,8 +78,12 @@ textarea { width:100%; height:100px; }
   border-radius:8px;
 }
 
-.time { font-size:12px; color:gray; }
+.time {
+  font-size:12px;
+  color:gray;
+}
 
+/* 通知 */
 #toast {
   position:fixed;
   top:100px;
@@ -71,19 +106,28 @@ textarea { width:100%; height:100px; }
 
   <div>
     <span id="userText"></span>
+
     <button id="loginBtn" onclick="toggleLogin()">サインイン/登録</button>
     <button id="logoutBtn" onclick="logout()" style="display:none;">ログアウト</button>
+    <button id="adminBtn" onclick="openAdmin()" style="display:none;">管理者パネル</button>
   </div>
 </div>
 
+<!-- ログイン -->
 <div id="loginBox">
   <input id="username" placeholder="ユーザー名">
   <input id="password" type="password" placeholder="パスワード">
   <button onclick="login()">OK</button>
 </div>
 
+<!-- 管理者 -->
+<div id="adminPanel">
+  <b>管理者パネル</b>
+  <div id="userList"></div>
+</div>
+
 <div class="container">
-<textarea id="msg" maxlength="150"></textarea><br>
+<textarea id="msg" maxlength="150" placeholder="メッセージを入力"></textarea><br>
 <button onclick="post()">送信</button>
 <div id="posts"></div>
 </div>
@@ -97,7 +141,7 @@ import {
   onSnapshot, orderBy, updateDoc, doc, deleteDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-/* Firebase設定 */
+/* 🔥 Firebase設定 */
 const firebaseConfig = {
   apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
   authDomain: "scratch-sns.firebaseapp.com",
@@ -111,8 +155,9 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 let currentUser = localStorage.getItem("username");
+const adminUser = "Hiromu0623";
 
-/* 🔥 XSS対策関数 */
+/* XSS対策 */
 function escapeHTML(str){
   return str
     .replace(/&/g,"&amp;")
@@ -122,16 +167,22 @@ function escapeHTML(str){
     .replace(/'/g,"&#039;");
 }
 
-/* UI */
+/* UI更新 */
 function updateUI(){
   userText.textContent = currentUser || "";
   loginBtn.style.display = currentUser ? "none" : "inline";
   logoutBtn.style.display = currentUser ? "inline" : "none";
+  adminBtn.style.display = currentUser===adminUser ? "inline" : "none";
   loginBox.style.display = "none";
 }
 updateUI();
 
-/* トースト */
+/* ログインBOX */
+window.toggleLogin = ()=>{
+  loginBox.style.display = loginBox.style.display==="none"?"block":"none";
+};
+
+/* 通知 */
 function toastMsg(msg){
   const t=document.getElementById("toast");
   t.textContent=msg;
@@ -141,8 +192,8 @@ function toastMsg(msg){
 
 /* ログイン */
 window.login = async ()=>{
-  const name = username.value;
-  const pass = password.value;
+  const name=username.value;
+  const pass=password.value;
 
   if(!name || !pass){
     toastMsg("入力してください");
@@ -153,12 +204,9 @@ window.login = async ()=>{
   const snap=await getDocs(q);
 
   if(snap.empty){
-    await addDoc(collection(db,"users"),{
-      username:name,
-      password:pass
-    });
-    currentUser=name;
+    await addDoc(collection(db,"users"),{username:name,password:pass});
     toastMsg("登録しました");
+    currentUser=name;
   }else{
     let ok=false;
     snap.forEach(d=>{
@@ -170,12 +218,20 @@ window.login = async ()=>{
       return;
     }
 
-    currentUser=name;
     toastMsg("ログインしました");
+    currentUser=name;
   }
 
   localStorage.setItem("username",name);
   updateUI();
+};
+
+/* ログアウト */
+window.logout = ()=>{
+  localStorage.removeItem("username");
+  currentUser=null;
+  updateUI();
+  toastMsg("ログアウトしました");
 };
 
 /* 投稿 */
@@ -200,6 +256,57 @@ window.post = async ()=>{
   msg.value="";
 };
 
+/* 時間 */
+function formatTime(t){
+  return new Date(t).toLocaleString();
+}
+
+/* いいね */
+window.like = async(id)=>{
+  const ref=doc(db,"posts",id);
+  const snap=await getDoc(ref);
+
+  let likes=snap.data().likes||[];
+
+  if(likes.includes(currentUser)){
+    likes=likes.filter(u=>u!==currentUser);
+  }else{
+    likes.push(currentUser);
+  }
+
+  await updateDoc(ref,{likes});
+};
+
+/* 削除 */
+window.del = async(id)=>{
+  await deleteDoc(doc(db,"posts",id));
+};
+
+/* 管理者パネル */
+window.openAdmin = async ()=>{
+  adminPanel.style.display = adminPanel.style.display==="none"?"block":"none";
+  userList.innerHTML="";
+
+  const snap=await getDocs(collection(db,"users"));
+
+  snap.forEach(d=>{
+    const name=d.data().username;
+
+    userList.innerHTML+=`
+      <div>
+        ${escapeHTML(name)}
+        <button onclick="banUser('${name}')">BAN</button>
+      </div>
+    `;
+  });
+};
+
+/* BAN */
+window.banUser = async(name)=>{
+  await addDoc(collection(db,"bans"),{username:name});
+  toastMsg(name+"をBANしました");
+};
+
 /* 表示 */
 onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
   posts.innerHTML="";
@@ -207,15 +314,19 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
   snap.forEach(d=>{
     const data=d.data();
     const id=d.id;
-
-    const safeName = escapeHTML(data.name);
-    const safeMsg = escapeHTML(data.message);
+    const liked=data.likes?.includes(currentUser);
 
     posts.innerHTML+=`
       <div class="comment">
-        <b>${safeName}</b>
-        <div class="time">${new Date(data.time).toLocaleString()}</div>
-        ${safeMsg}
+        <b>${escapeHTML(data.name)}</b>
+        <div class="time">${formatTime(data.time)}</div>
+        ${escapeHTML(data.message)}<br>
+
+        👍 ${data.likes?.length||0}
+        <button onclick="like('${id}')">${liked?"いいね解除":"いいね"}</button>
+
+        ${(currentUser===data.name || currentUser===adminUser)
+          ? `<button onclick="del('${id}')">削除</button>`:""}
       </div>
     `;
   });
