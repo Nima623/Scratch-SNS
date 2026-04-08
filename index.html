@@ -12,8 +12,6 @@ body {
   font-family:'Kosugi Maru', sans-serif;
   background:#f7f7f7;
 }
-
-/* 上バー */
 .topbar {
   background:#ffab19;
   padding:10px;
@@ -21,13 +19,8 @@ body {
   justify-content:space-between;
   align-items:center;
 }
+button { cursor:pointer; }
 
-/* ボタンカーソル */
-button {
-  cursor:pointer;
-}
-
-/* ログインBOX */
 #loginBox {
   display:none;
   position:absolute;
@@ -41,13 +34,8 @@ button {
   flex-direction:column;
   gap:8px;
 }
+#loginBox input { width:100%; padding:6px; }
 
-#loginBox input {
-  width:100%;
-  padding:6px;
-}
-
-/* 管理者パネル */
 #adminPanel {
   display:none;
   position:fixed;
@@ -60,16 +48,11 @@ button {
   width:300px;
 }
 
-/* メイン */
 .container {
   max-width:600px;
   margin:20px auto;
 }
-
-textarea {
-  width:100%;
-  height:100px;
-}
+textarea { width:100%; height:100px; }
 
 .comment {
   background:white;
@@ -77,13 +60,11 @@ textarea {
   margin-top:10px;
   border-radius:8px;
 }
-
 .time {
   font-size:12px;
   color:gray;
 }
 
-/* 通知 */
 #toast {
   position:fixed;
   top:100px;
@@ -103,24 +84,20 @@ textarea {
 
 <div class="topbar">
   <b>雑談所</b>
-
   <div>
     <span id="userText"></span>
-
     <button id="loginBtn" onclick="toggleLogin()">サインイン/登録</button>
     <button id="logoutBtn" onclick="logout()" style="display:none;">ログアウト</button>
     <button id="adminBtn" onclick="openAdmin()" style="display:none;">管理者パネル</button>
   </div>
 </div>
 
-<!-- ログイン -->
 <div id="loginBox">
   <input id="username" placeholder="ユーザー名">
   <input id="password" type="password" placeholder="パスワード">
   <button onclick="login()">OK</button>
 </div>
 
-<!-- 管理者 -->
 <div id="adminPanel">
   <b>管理者パネル</b>
   <div id="userList"></div>
@@ -141,7 +118,6 @@ import {
   onSnapshot, orderBy, updateDoc, doc, deleteDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-/* 🔥 Firebase設定 */
 const firebaseConfig = {
   apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
   authDomain: "scratch-sns.firebaseapp.com",
@@ -157,7 +133,6 @@ const db = getFirestore(app);
 let currentUser = localStorage.getItem("username");
 const adminUser = "Hiromu0623";
 
-/* XSS対策 */
 function escapeHTML(str){
   return str
     .replace(/&/g,"&amp;")
@@ -167,7 +142,6 @@ function escapeHTML(str){
     .replace(/'/g,"&#039;");
 }
 
-/* UI更新 */
 function updateUI(){
   userText.textContent = currentUser || "";
   loginBtn.style.display = currentUser ? "none" : "inline";
@@ -177,12 +151,10 @@ function updateUI(){
 }
 updateUI();
 
-/* ログインBOX */
 window.toggleLogin = ()=>{
   loginBox.style.display = loginBox.style.display==="none"?"block":"none";
 };
 
-/* 通知 */
 function toastMsg(msg){
   const t=document.getElementById("toast");
   t.textContent=msg;
@@ -190,7 +162,6 @@ function toastMsg(msg){
   setTimeout(()=>t.style.opacity=0,1500);
 }
 
-/* ログイン */
 window.login = async ()=>{
   const name=username.value;
   const pass=password.value;
@@ -226,7 +197,6 @@ window.login = async ()=>{
   updateUI();
 };
 
-/* ログアウト */
 window.logout = ()=>{
   localStorage.removeItem("username");
   currentUser=null;
@@ -234,7 +204,6 @@ window.logout = ()=>{
   toastMsg("ログアウトしました");
 };
 
-/* 投稿 */
 window.post = async ()=>{
   if(!currentUser){
     toastMsg("サインインしてください");
@@ -256,12 +225,10 @@ window.post = async ()=>{
   msg.value="";
 };
 
-/* 時間 */
 function formatTime(t){
   return new Date(t).toLocaleString();
 }
 
-/* いいね */
 window.like = async(id)=>{
   const ref=doc(db,"posts",id);
   const snap=await getDoc(ref);
@@ -277,12 +244,11 @@ window.like = async(id)=>{
   await updateDoc(ref,{likes});
 };
 
-/* 削除 */
 window.del = async(id)=>{
   await deleteDoc(doc(db,"posts",id));
 };
 
-/* 管理者パネル */
+/* ⭐ 修正済み */
 window.openAdmin = async ()=>{
   adminPanel.style.display = adminPanel.style.display==="none"?"block":"none";
   userList.innerHTML="";
@@ -292,22 +258,26 @@ window.openAdmin = async ()=>{
   snap.forEach(d=>{
     const name=d.data().username;
 
-    userList.innerHTML+=`
-      <div>
-        ${escapeHTML(name)}
-        <button onclick="banUser('${name}')">BAN</button>
-      </div>
-    `;
+    const div = document.createElement("div");
+
+    const nameText = document.createTextNode(name);
+
+    const btn = document.createElement("button");
+    btn.textContent = "BAN";
+    btn.onclick = () => banUser(name);
+
+    div.appendChild(nameText);
+    div.appendChild(btn);
+
+    userList.appendChild(div);
   });
 };
 
-/* BAN */
 window.banUser = async(name)=>{
   await addDoc(collection(db,"bans"),{username:name});
   toastMsg(name+"をBANしました");
 };
 
-/* 表示 */
 onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
   posts.innerHTML="";
 
