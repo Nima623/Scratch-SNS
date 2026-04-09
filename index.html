@@ -66,12 +66,13 @@ textarea {
   color:gray;
 }
 
-/* いいね位置調整 */
+/* 👍 少しだけ右にする */
 .likeArea {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
   margin-top:5px;
+}
+
+.likeBtn {
+  margin-left:10px;
 }
 
 /* 通知 */
@@ -128,7 +129,7 @@ const db = getFirestore(app);
 
 let currentUser = localStorage.getItem("username");
 
-/* UI更新 */
+/* UI */
 function updateUI(){
   userText.textContent = currentUser || "";
   loginBtn.style.display = currentUser ? "none" : "inline";
@@ -155,7 +156,7 @@ async function hash(pass){
   return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 
-/* ログイン（修正） */
+/* 🔥 ログイン修正 */
 window.login = async ()=>{
   const name=username.value;
   const pass=password.value;
@@ -165,7 +166,7 @@ window.login = async ()=>{
     return;
   }
 
-  const hashed = await hash(pass); // ← 先に作る
+  const hashed = await hash(pass); // ← 1回だけ
 
   const q=query(collection(db,"users"),where("username","==",name));
   const snap=await getDocs(q);
@@ -181,9 +182,9 @@ window.login = async ()=>{
     let ok=false;
 
     for(const d of snap.docs){
-      const saved = d.data().password;
+      const saved=d.data().password;
 
-      if(saved === pass || saved === hashed){
+      if(saved === hashed){ // ← これだけでOK
         ok=true;
       }
     }
@@ -280,6 +281,7 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
     likeText.textContent="👍 "+(data.likes?.length||0);
 
     const likeBtn=document.createElement("button");
+    likeBtn.className="likeBtn";
     likeBtn.textContent=data.likes?.includes(currentUser)?"いいね解除":"いいね";
     likeBtn.onclick=()=>like(id);
 
