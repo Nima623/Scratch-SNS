@@ -7,27 +7,25 @@
 <link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap" rel="stylesheet">
 
 <style>
-body { margin:0; font-family:'Kosugi Maru', sans-serif; background:#f7f7f7; }
+body {
+  margin:0;
+  font-family:'Kosugi Maru', sans-serif;
+  background:#f7f7f7;
+}
 
 .topbar {
   background:#ffab19;
   padding:10px;
   display:flex;
   justify-content:space-between;
+  align-items:center;
 }
 
 button {
   cursor:pointer;
-  padding:8px 14px;
-  font-size:14px;
-  border:none;
-  border-radius:8px;
-  background:#ffab19;
-  color:white;
 }
 
-button:hover { background:#ff9200; }
-
+/* 元のUIに戻す */
 #loginBox {
   display:none;
   position:absolute;
@@ -37,6 +35,7 @@ button:hover { background:#ff9200; }
   padding:15px;
   border-radius:10px;
   width:180px;
+  display:flex;
   flex-direction:column;
   gap:8px;
 }
@@ -53,7 +52,15 @@ button:hover { background:#ff9200; }
   width:300px;
 }
 
-.container { max-width:600px; margin:20px auto; }
+.container {
+  max-width:600px;
+  margin:20px auto;
+}
+
+textarea {
+  width:100%;
+  height:100px;
+}
 
 .comment {
   background:white;
@@ -66,8 +73,10 @@ button:hover { background:#ff9200; }
 #banScreen {
   display:none;
   position:fixed;
-  top:0;left:0;
-  width:100%;height:100%;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
   background:white;
   justify-content:center;
   align-items:center;
@@ -83,24 +92,24 @@ button:hover { background:#ff9200; }
 <div id="banScreen"></div>
 
 <div class="topbar">
-<b>雑談所</b>
-<div>
-<span id="userText"></span>
-<button onclick="toggleLogin()">ログイン</button>
-<button onclick="logout()">ログアウト</button>
-<button onclick="openAdmin()">管理者メニュー</button>
-</div>
+  <b>雑談所</b>
+  <div>
+    <span id="userText"></span>
+    <button onclick="toggleLogin()">サインイン/登録</button>
+    <button onclick="logout()">ログアウト</button>
+    <button onclick="openAdmin()">管理者メニュー</button>
+  </div>
 </div>
 
 <div id="loginBox">
-<input id="username" placeholder="ユーザー名">
-<input id="password" type="password" placeholder="パスワード">
-<button onclick="login()">OK</button>
+  <input id="username" placeholder="ユーザー名">
+  <input id="password" type="password" placeholder="パスワード">
+  <button onclick="login()">OK</button>
 </div>
 
 <div id="adminPanel">
-<b>管理者メニュー</b>
-<div id="userList"></div>
+  <b>管理者メニュー</b>
+  <div id="userList"></div>
 </div>
 
 <div class="container">
@@ -113,7 +122,7 @@ button:hover { background:#ff9200; }
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import {
   getFirestore, collection, addDoc, query, where, getDocs,
-  onSnapshot, orderBy, updateDoc, doc, deleteDoc, getDoc
+  onSnapshot, orderBy, updateDoc, doc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 const app = initializeApp({ projectId:"scratch-sns" });
@@ -129,7 +138,7 @@ function updateUI(){
 updateUI();
 
 window.toggleLogin=()=>{
-  loginBox.style.display = loginBox.style.display==="none"?"flex":"none";
+  loginBox.style.display = loginBox.style.display==="none"?"block":"none";
 };
 
 /* ハッシュ */
@@ -191,49 +200,12 @@ onSnapshot(collection(db,"bans"), snap=>{
 
 function showBan(b){
   banScreen.style.display="flex";
-
-  if(b.permanent){
-    banScreen.innerHTML="あなたは管理者によってBANされました。";
-    return;
-  }
-
-  const loop=()=>{
-    const remain = b.until - Date.now();
-    if(remain<=0){ location.reload(); return; }
-    banScreen.innerHTML=`あなたはBANされています<br>残り${Math.floor(remain/60000)}分`;
-    setTimeout(loop,1000);
-  };
-  loop();
-}
-
-/* NGワード */
-const NG=["死ね","バカ"];
-
-async function checkNG(text){
-  if(!NG.some(w=>text.includes(w))) return false;
-
-  let count = Number(localStorage.getItem("ngCount")||0)+1;
-  localStorage.setItem("ngCount",count);
-
-  if(count>=10){
-    await addDoc(collection(db,"bans"),{
-      username:currentUser,
-      until:Date.now()+15*60000
-    });
-
-    await systemPost(currentUser+"さんが15分BANされました");
-    localStorage.removeItem("ngCount");
-    return true;
-  }
-
-  return false;
+  banScreen.innerHTML="あなたは管理者によってバンされました。";
 }
 
 /* 投稿 */
 window.post=async ()=>{
   if(!currentUser) return;
-
-  if(await checkNG(msg.value)) return;
 
   await addDoc(collection(db,"posts"),{
     name:currentUser,
@@ -283,7 +255,7 @@ window.openAdmin=async ()=>{
         permanent:true
       });
 
-      await systemPost(name+"さんが永久バンされました");
+      await systemPost(name+"さんがバンされました");
     };
 
     div.appendChild(btn);
