@@ -39,6 +39,7 @@ button {
   padding:15px;
   border-radius:10px;
   width:180px;
+  display:flex;
   flex-direction:column;
   gap:8px;
 }
@@ -66,13 +67,12 @@ textarea {
   color:gray;
 }
 
-/* 👍 少しだけ右にする */
 .likeArea {
   margin-top:5px;
 }
 
 .likeBtn {
-  margin-left:10px;
+  margin-left:8px;
 }
 
 /* 通知 */
@@ -124,7 +124,17 @@ import {
   onSnapshot, orderBy, updateDoc, doc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-const app = initializeApp({ projectId:"scratch-sns" });
+/* 🔥 Firebase設定（これ重要） */
+const firebaseConfig = {
+  apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
+  authDomain: "scratch-sns.firebaseapp.com",
+  projectId: "scratch-sns",
+  storageBucket: "scratch-sns.firebasestorage.app",
+  messagingSenderId: "414045447005",
+  appId: "1:414045447005:web:f4710d0a90a43745fcbeb4"
+};
+
+const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 let currentUser = localStorage.getItem("username");
@@ -156,7 +166,7 @@ async function hash(pass){
   return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 
-/* 🔥 ログイン修正 */
+/* ログイン */
 window.login = async ()=>{
   const name=username.value;
   const pass=password.value;
@@ -166,7 +176,7 @@ window.login = async ()=>{
     return;
   }
 
-  const hashed = await hash(pass); // ← 1回だけ
+  const hashed = await hash(pass);
 
   const q=query(collection(db,"users"),where("username","==",name));
   const snap=await getDocs(q);
@@ -182,9 +192,7 @@ window.login = async ()=>{
     let ok=false;
 
     for(const d of snap.docs){
-      const saved=d.data().password;
-
-      if(saved === hashed){ // ← これだけでOK
+      if(d.data().password === hashed){
         ok=true;
       }
     }
