@@ -21,9 +21,7 @@ body {
   align-items:center;
 }
 
-button {
-  cursor:pointer;
-}
+button { cursor:pointer; }
 
 .sendBtn {
   padding:10px 18px;
@@ -42,6 +40,18 @@ button {
   display:flex;
   flex-direction:column;
   gap:8px;
+}
+
+#adminPanel {
+  display:none;
+  position:fixed;
+  top:100px;
+  left:50%;
+  transform:translateX(-50%);
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  width:300px;
 }
 
 .container {
@@ -67,15 +77,8 @@ textarea {
   color:gray;
 }
 
-.likeArea {
-  margin-top:5px;
-}
+.likeBtn { margin-left:8px; }
 
-.likeBtn {
-  margin-left:8px;
-}
-
-/* 通知 */
 #toast {
   position:fixed;
   top:100px;
@@ -100,6 +103,7 @@ textarea {
 
     <button id="loginBtn" onclick="toggleLogin()">サインイン/登録</button>
     <button id="logoutBtn" onclick="logout()" style="display:none;">ログアウト</button>
+    <button id="adminBtn" onclick="openAdmin()" style="display:none;">管理者メニュー</button>
   </div>
 </div>
 
@@ -107,6 +111,11 @@ textarea {
   <input id="username" placeholder="ユーザー名">
   <input id="password" type="password" placeholder="パスワード">
   <button onclick="login()">OK</button>
+</div>
+
+<div id="adminPanel">
+  <b>管理者メニュー</b>
+  <div id="userList"></div>
 </div>
 
 <div class="container">
@@ -124,26 +133,25 @@ import {
   onSnapshot, orderBy, updateDoc, doc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-/* 🔥 Firebase設定（これ重要） */
+/* Firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyCAX28P2QGaNNp6xytLsE9hhcVher9TgPY",
   authDomain: "scratch-sns.firebaseapp.com",
   projectId: "scratch-sns",
-  storageBucket: "scratch-sns.firebasestorage.app",
-  messagingSenderId: "414045447005",
-  appId: "1:414045447005:web:f4710d0a90a43745fcbeb4"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 let currentUser = localStorage.getItem("username");
+const adminUser = "Hiromu0623";
 
 /* UI */
 function updateUI(){
   userText.textContent = currentUser || "";
   loginBtn.style.display = currentUser ? "none" : "inline";
   logoutBtn.style.display = currentUser ? "inline" : "none";
+  adminBtn.style.display = currentUser===adminUser ? "inline" : "none";
   loginBox.style.display = "none";
 }
 updateUI();
@@ -191,11 +199,11 @@ window.login = async ()=>{
   }else{
     let ok=false;
 
-    for(const d of snap.docs){
+    snap.forEach(d=>{
       if(d.data().password === hashed){
         ok=true;
       }
-    }
+    });
 
     if(!ok){
       toastMsg("パスワードが違います");
@@ -245,8 +253,13 @@ function formatTime(t){
   return new Date(t).toLocaleString();
 }
 
-/* いいね */
+/* いいね（修正） */
 window.like = async(id)=>{
+  if(!currentUser){
+    toastMsg("ログインしてください");
+    return;
+  }
+
   const ref=doc(db,"posts",id);
   const snap=await getDoc(ref);
 
@@ -259,6 +272,23 @@ window.like = async(id)=>{
   }
 
   await updateDoc(ref,{likes});
+};
+
+/* 管理者 */
+window.openAdmin = async ()=>{
+  adminPanel.style.display = adminPanel.style.display==="none"?"block":"none";
+  userList.innerHTML="";
+
+  const snap=await getDocs(collection(db,"users"));
+
+  snap.forEach(d=>{
+    const name=d.data().username;
+
+    const div=document.createElement("div");
+    div.textContent=name;
+
+    userList.appendChild(div);
+  });
 };
 
 /* 表示 */
@@ -282,24 +312,23 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
     const msgEl=document.createElement("div");
     msgEl.textContent=data.message;
 
-    const likeArea=document.createElement("div");
-    likeArea.className="likeArea";
-
-    const likeText=document.createElement("span");
-    likeText.textContent="👍 "+(data.likes?.length||0);
-
-    const likeBtn=document.createElement("button");
-    likeBtn.className="likeBtn";
-    likeBtn.textContent=data.likes?.includes(currentUser)?"いいね解除":"いいね";
-    likeBtn.onclick=()=>like(id);
-
-    likeArea.appendChild(likeText);
-    likeArea.appendChild(likeBtn);
-
     div.appendChild(name);
     div.appendChild(time);
     div.appendChild(msgEl);
-    div.appendChild(likeArea);
+
+    /* システムはいいね不可 */
+    if(data.name !== "[システム]"){
+      const likeText=document.createElement("span");
+      likeText.textContent="👍 "+(data.likes?.length||0);
+
+      const likeBtn=document.createElement("button");
+      likeBtn.className="likeBtn";
+      likeBtn.textContent=data.likes?.includes(currentUser)?"いいね解除":"いいね";
+      likeBtn.onclick=()=>like(id);
+
+      div.appendChild(likeText);
+      div.appendChild(likeBtn);
+    }
 
     posts.appendChild(div);
   });
