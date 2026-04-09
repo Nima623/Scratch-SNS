@@ -87,12 +87,12 @@ const db = getFirestore(app);
 let currentUser = localStorage.getItem("username");
 const adminUser = "Hiromu0623";
 
-/* 管理者判定（簡易強化） */
+/* 管理者判定（修正） */
 function isAdmin(){
-  return currentUser===adminUser && localStorage.getItem("isAdmin")==="true";
+  return currentUser === adminUser;
 }
 
-/* パスワードhash */
+/* ハッシュ */
 async function hash(pass){
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pass));
   return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,"0")).join("");
@@ -126,31 +126,49 @@ function toastMsg(msg){
   setTimeout(()=>toast.style.opacity=0,1500);
 }
 
-/* ログイン */
+/* ログイン（修正） */
 window.login=async ()=>{
   const name=username.value;
   const pass=password.value;
-  if(!name||!pass)return toastMsg("入力してください");
 
-  const hashed=await hash(pass);
+  if(!name || !pass){
+    toastMsg("入力してください");
+    return;
+  }
+
   const q=query(collection(db,"users"),where("username","==",name));
   const snap=await getDocs(q);
 
   if(snap.empty){
+    const hashed = await hash(pass);
     await addDoc(collection(db,"users"),{username:name,password:hashed});
     toastMsg("登録しました");
     currentUser=name;
   }else{
     let ok=false;
-    snap.forEach(d=>{if(d.data().password===hashed) ok=true;});
-    if(!ok)return toastMsg("パスワード違う");
+
+    for(const d of snap.docs){
+      const saved = d.data().password;
+
+      // 平文 or ハッシュ両対応
+      if(saved === pass){
+        ok=true;
+        // ハッシュに移行
+        const hashed = await hash(pass);
+        await updateDoc(doc(db,"users",d.id),{password:hashed});
+      }else{
+        const hashed = await hash(pass);
+        if(saved === hashed) ok=true;
+      }
+    }
+
+    if(!ok){
+      toastMsg("パスワードが違います");
+      return;
+    }
+
     toastMsg("ログインしました");
     currentUser=name;
-  }
-
-  /* 管理者フラグ */
-  if(name===adminUser){
-    localStorage.setItem("isAdmin","true");
   }
 
   localStorage.setItem("username",name);
@@ -165,8 +183,8 @@ window.logout=()=>{
 
 /* 投稿 */
 window.post=async ()=>{
-  if(!currentUser)return toastMsg("ログインして");
-  if(isBanned(currentUser))return toastMsg("BANされています");
+  if(!currentUser) return toastMsg("ログインしてください");
+  if(isBanned(currentUser)) return toastMsg("BANされています");
 
   await addDoc(collection(db,"posts"),{
     name:currentUser,
@@ -178,15 +196,17 @@ window.post=async ()=>{
   msg.value="";
 };
 
-/* いいね（連打対策） */
+/* いいね修正 */
 window.like=async(id,btn)=>{
-  if(!currentUser)return;
+  if(!currentUser) return;
+
   btn.disabled=true;
 
   const ref=doc(db,"posts",id);
   const snap=await getDoc(ref);
 
   let likes=snap.data().likes||[];
+
   if(likes.includes(currentUser)){
     likes=likes.filter(u=>u!==currentUser);
   }else{
@@ -194,7 +214,7 @@ window.like=async(id,btn)=>{
   }
 
   await updateDoc(ref,{likes});
-  setTimeout(()=>btn.disabled=false,500);
+  setTimeout(()=>btn.disabled=false,300);
 };
 
 /* 削除 */
@@ -215,7 +235,6 @@ window.openAdmin=async ()=>{
 
     const text=document.createTextNode(name+" ");
 
-    /* BAN */
     const banBtn=document.createElement("button");
     banBtn.textContent="BAN";
     banBtn.onclick=async ()=>{
@@ -223,7 +242,6 @@ window.openAdmin=async ()=>{
       toastMsg(name+" BAN");
     };
 
-    /* 解除 */
     const unbanBtn=document.createElement("button");
     unbanBtn.textContent="解除";
     unbanBtn.onclick=async ()=>{
@@ -241,13 +259,13 @@ window.openAdmin=async ()=>{
   });
 };
 
-/* 表示 */
+/* 表示（完全修正） */
 onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
   posts.innerHTML="";
 
   snap.forEach(d=>{
     const data=d.data();
-    if(isBanned(data.name))return;
+    if(isBanned(data.name)) return;
 
     const id=d.id;
 
@@ -260,23 +278,29 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
     const msgEl=document.createElement("div");
     msgEl.textContent=data.message;
 
-    const likeText=document.createElement("span");
-    likeText.textContent="👍 "+(data.likes?.length||0);
-
-    const likeBtn=document.createElement("button");
-    likeBtn.textContent="いいね";
-    likeBtn.onclick=()=>like(id,likeBtn);
-
     div.appendChild(name);
     div.appendChild(msgEl);
-    div.appendChild(likeText);
-    div.appendChild(likeBtn);
 
-    if(currentUser===data.name || isAdmin()){
-      const delBtn=document.createElement("button");
-      delBtn.textContent="削除";
-      delBtn.onclick=()=>del(id);
-      div.appendChild(delBtn);
+    // システムじゃない場合のみ
+    if(data.name !== "[システム]"){
+      const liked = data.likes?.includes(currentUser);
+
+      const likeText=document.createElement("span");
+      likeText.textContent="👍 "+(data.likes?.length||0);
+
+      const likeBtn=document.createElement("button");
+      likeBtn.textContent=liked?"いいね解除":"いいね";
+      likeBtn.onclick=()=>like(id,likeBtn);
+
+      div.appendChild(likeText);
+      div.appendChild(likeBtn);
+
+      if(currentUser===data.name || isAdmin()){
+        const delBtn=document.createElement("button");
+        delBtn.textContent="削除";
+        delBtn.onclick=()=>del(id);
+        div.appendChild(delBtn);
+      }
     }
 
     posts.appendChild(div);
