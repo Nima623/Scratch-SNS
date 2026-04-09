@@ -25,7 +25,6 @@ button {
   cursor:pointer;
 }
 
-/* 送信ボタン強化 */
 .sendBtn {
   padding:10px 18px;
   font-size:15px;
@@ -40,7 +39,6 @@ button {
   padding:15px;
   border-radius:10px;
   width:180px;
-  display:flex;
   flex-direction:column;
   gap:8px;
 }
@@ -66,6 +64,14 @@ textarea {
 .time {
   font-size:12px;
   color:gray;
+}
+
+/* いいね位置調整 */
+.likeArea {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:5px;
 }
 
 /* 通知 */
@@ -149,7 +155,7 @@ async function hash(pass){
   return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 
-/* ログイン */
+/* ログイン（修正） */
 window.login = async ()=>{
   const name=username.value;
   const pass=password.value;
@@ -159,13 +165,15 @@ window.login = async ()=>{
     return;
   }
 
+  const hashed = await hash(pass); // ← 先に作る
+
   const q=query(collection(db,"users"),where("username","==",name));
   const snap=await getDocs(q);
 
   if(snap.empty){
     await addDoc(collection(db,"users"),{
       username:name,
-      password:await hash(pass)
+      password:hashed
     });
     toastMsg("登録しました");
     currentUser=name;
@@ -173,7 +181,9 @@ window.login = async ()=>{
     let ok=false;
 
     for(const d of snap.docs){
-      if(d.data().password === pass || d.data().password === await hash(pass)){
+      const saved = d.data().password;
+
+      if(saved === pass || saved === hashed){
         ok=true;
       }
     }
@@ -191,10 +201,12 @@ window.login = async ()=>{
   updateUI();
 };
 
+/* ログアウト */
 window.logout = ()=>{
   localStorage.clear();
   currentUser=null;
   updateUI();
+  toastMsg("ログアウトしました");
 };
 
 /* 投稿 */
@@ -261,6 +273,9 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
     const msgEl=document.createElement("div");
     msgEl.textContent=data.message;
 
+    const likeArea=document.createElement("div");
+    likeArea.className="likeArea";
+
     const likeText=document.createElement("span");
     likeText.textContent="👍 "+(data.likes?.length||0);
 
@@ -268,11 +283,13 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
     likeBtn.textContent=data.likes?.includes(currentUser)?"いいね解除":"いいね";
     likeBtn.onclick=()=>like(id);
 
+    likeArea.appendChild(likeText);
+    likeArea.appendChild(likeBtn);
+
     div.appendChild(name);
     div.appendChild(time);
     div.appendChild(msgEl);
-    div.appendChild(likeText);
-    div.appendChild(likeBtn);
+    div.appendChild(likeArea);
 
     posts.appendChild(div);
   });
