@@ -43,6 +43,10 @@ textarea { width:100%; height:100px; }
   border-radius:8px; opacity:0; transition:0.5s;
 }
 
+/* ボタン位置調整 */
+.likeBtn { margin-left:8px; }
+.delBtn { margin-left:8px; }
+
 .banScreen{
   position:fixed;
   top:0; left:0;
@@ -52,8 +56,6 @@ textarea { width:100%; height:100px; }
   justify-content:center;
   align-items:center;
   font-size:20px;
-  text-align:center;
-  z-index:9999;
 }
 </style>
 </head>
@@ -96,14 +98,13 @@ import {
   onSnapshot, orderBy, updateDoc, doc, deleteDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-/* Firebase */
 const app = initializeApp({ projectId:"scratch-sns" });
 const db = getFirestore(app);
 
 let currentUser = localStorage.getItem("username");
 const adminUser = "Hiromu0623";
 
-/* BAN管理 */
+/* BAN */
 let bannedUsers = [];
 onSnapshot(collection(db,"bans"), snap=>{
   bannedUsers = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -114,19 +115,14 @@ function isBanned(name){
   return bannedUsers.some(b=>b.username===name);
 }
 
-/* BAN画面 */
 function showBanScreen(text){
   document.body.innerHTML = `<div class="banScreen">${text}</div>`;
 }
 
-/* BANチェック */
 function checkMyBan(){
   if(!currentUser) return;
-
   const b = bannedUsers.find(b=>b.username===currentUser);
-  if(!b) return;
-
-  showBanScreen("あなたは管理者によってバンされました。");
+  if(b) showBanScreen("あなたは管理者によってバンされました。");
 }
 
 /* UI */
@@ -153,16 +149,6 @@ async function hash(pass){
   return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 
-/* システム投稿 */
-async function systemPost(text){
-  await addDoc(collection(db,"posts"),{
-    name:"[システム]",
-    message:text,
-    time:Date.now(),
-    likes:[]
-  });
-}
-
 /* ログイン */
 window.login=async ()=>{
   const name=username.value;
@@ -177,10 +163,11 @@ window.login=async ()=>{
   const snap=await getDocs(q);
 
   if(snap.empty){
-    const hashed = await hash(pass);
-    await addDoc(collection(db,"users"),{username:name,password:hashed});
+    await addDoc(collection(db,"users"),{
+      username:name,
+      password:await hash(pass)
+    });
     toastMsg("登録しました");
-    await systemPost(name+" が参加しました");
     currentUser=name;
   }else{
     let ok=false;
@@ -209,12 +196,18 @@ window.logout=()=>{
   localStorage.clear();
   currentUser=null;
   updateUI();
+  toastMsg("ログアウトしました");
 };
 
 /* 投稿 */
 window.post=async ()=>{
   if(!currentUser) return toastMsg("ログインしてください");
   if(isBanned(currentUser)) return;
+
+  if(!msg.value){
+    toastMsg("文字を入力してください");
+    return;
+  }
 
   await addDoc(collection(db,"posts"),{
     name:currentUser,
@@ -226,42 +219,80 @@ window.post=async ()=>{
   msg.value="";
 };
 
-/* 管理者 */
-window.openAdmin=async ()=>{
-  adminPanel.style.display=adminPanel.style.display==="none"?"block":"none";
-  userList.innerHTML="";
+/* いいね */
+window.like=async(id,btn)=>{
+  if(!currentUser) return;
 
-  const snap=await getDocs(collection(db,"users"));
+  const ref=doc(db,"posts",id);
+  const snap=await getDoc(ref);
+
+  let likes=snap.data().likes||[];
+
+  if(likes.includes(currentUser)){
+    likes=likes.filter(u=>u!==currentUser);
+  }else{
+    likes.push(currentUser);
+  }
+
+  await updateDoc(ref,{likes});
+};
+
+/* 削除 */
+window.del=async(id)=>{
+  await deleteDoc(doc(db,"posts",id));
+};
+
+/* 表示（←これが消えてた原因） */
+onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
+  posts.innerHTML="";
 
   snap.forEach(d=>{
-    const name=d.data().username;
+    const data=d.data();
+    const id=d.id;
+
+    if(isBanned(data.name) && data.name!=="[システム]") return;
+
     const div=document.createElement("div");
+    div.className="comment";
 
-    /* BANボタン */
-    const banBtn=document.createElement("button");
-    banBtn.textContent="BAN";
-    banBtn.onclick=async ()=>{
-      await addDoc(collection(db,"bans"),{username:name});
-      await systemPost(name+" がバンされました");
-    };
+    const name=document.createElement("b");
+    name.textContent=data.name;
 
-    /* ⭐ BAN解除ボタン */
-    const unbanBtn=document.createElement("button");
-    unbanBtn.textContent="解除";
-    unbanBtn.onclick=async ()=>{
-      const target=bannedUsers.find(b=>b.username===name);
-      if(target){
-        await deleteDoc(doc(db,"bans",target.id));
-        await systemPost(name+" のBANが解除されました");
+    const time=document.createElement("div");
+    time.className="time";
+    time.textContent=new Date(data.time).toLocaleString();
+
+    const msgEl=document.createElement("div");
+    msgEl.textContent=data.message;
+
+    div.appendChild(name);
+    div.appendChild(time);
+    div.appendChild(msgEl);
+
+    if(data.name!=="[システム]"){
+      const likeText=document.createElement("span");
+      likeText.textContent="👍 "+(data.likes?.length||0);
+
+      const likeBtn=document.createElement("button");
+      likeBtn.textContent=data.likes?.includes(currentUser)?"いいね解除":"いいね";
+      likeBtn.className="likeBtn";
+      likeBtn.onclick=()=>like(id,likeBtn);
+
+      div.appendChild(likeText);
+      div.appendChild(likeBtn);
+
+      if(currentUser===data.name || currentUser===adminUser){
+        const delBtn=document.createElement("button");
+        delBtn.textContent="削除";
+        delBtn.className="delBtn";
+        delBtn.onclick=()=>del(id);
+        div.appendChild(delBtn);
       }
-    };
+    }
 
-    div.textContent=name+" ";
-    div.appendChild(banBtn);
-    div.appendChild(unbanBtn);
-    userList.appendChild(div);
+    posts.appendChild(div);
   });
-};
+});
 </script>
 
 </body>
