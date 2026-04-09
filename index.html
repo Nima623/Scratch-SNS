@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Scratch雑談SNS</title>
+
 <link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap" rel="stylesheet">
 
 <style>
@@ -15,6 +16,7 @@ button { cursor:pointer; }
   background:white; padding:15px; border-radius:10px;
   width:180px; display:flex; flex-direction:column; gap:8px;
 }
+
 #adminPanel {
   display:none; position:fixed; top:100px; left:50%;
   transform:translateX(-50%);
@@ -51,7 +53,7 @@ textarea { width:100%; height:100px; }
     <span id="userText"></span>
     <button id="loginBtn" onclick="toggleLogin()">サインイン/登録</button>
     <button id="logoutBtn" onclick="logout()" style="display:none;">ログアウト</button>
-    <button id="adminBtn" onclick="openAdmin()" style="display:none;">管理者</button>
+    <button id="adminBtn" onclick="openAdmin()" style="display:none;">管理者メニュー</button>
   </div>
 </div>
 
@@ -62,7 +64,7 @@ textarea { width:100%; height:100px; }
 </div>
 
 <div id="adminPanel">
-  <b>管理者パネル</b>
+  <b>管理者メニュー</b>
   <div id="userList"></div>
 </div>
 
@@ -87,7 +89,7 @@ const db = getFirestore(app);
 let currentUser = localStorage.getItem("username");
 const adminUser = "Hiromu0623";
 
-/* 管理者判定（修正） */
+/* 管理者判定 */
 function isAdmin(){
   return currentUser === adminUser;
 }
@@ -96,6 +98,16 @@ function isAdmin(){
 async function hash(pass){
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pass));
   return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+
+/* システム投稿 */
+async function systemPost(text){
+  await addDoc(collection(db,"posts"),{
+    name:"[システム]",
+    message:text,
+    time:Date.now(),
+    likes:[]
+  });
 }
 
 /* BAN */
@@ -126,7 +138,7 @@ function toastMsg(msg){
   setTimeout(()=>toast.style.opacity=0,1500);
 }
 
-/* ログイン（修正） */
+/* ログイン */
 window.login=async ()=>{
   const name=username.value;
   const pass=password.value;
@@ -143,6 +155,7 @@ window.login=async ()=>{
     const hashed = await hash(pass);
     await addDoc(collection(db,"users"),{username:name,password:hashed});
     toastMsg("登録しました");
+    await systemPost(name+" が参加しました");
     currentUser=name;
   }else{
     let ok=false;
@@ -150,10 +163,8 @@ window.login=async ()=>{
     for(const d of snap.docs){
       const saved = d.data().password;
 
-      // 平文 or ハッシュ両対応
       if(saved === pass){
         ok=true;
-        // ハッシュに移行
         const hashed = await hash(pass);
         await updateDoc(doc(db,"users",d.id),{password:hashed});
       }else{
@@ -196,7 +207,7 @@ window.post=async ()=>{
   msg.value="";
 };
 
-/* いいね修正 */
+/* いいね */
 window.like=async(id,btn)=>{
   if(!currentUser) return;
 
@@ -239,7 +250,8 @@ window.openAdmin=async ()=>{
     banBtn.textContent="BAN";
     banBtn.onclick=async ()=>{
       await addDoc(collection(db,"bans"),{username:name});
-      toastMsg(name+" BAN");
+      toastMsg(name+"をバンしました");
+      await systemPost(name+" がバンされました");
     };
 
     const unbanBtn=document.createElement("button");
@@ -248,7 +260,8 @@ window.openAdmin=async ()=>{
       const target=bannedUsers.find(b=>b.username===name);
       if(target){
         await deleteDoc(doc(db,"bans",target.id));
-        toastMsg(name+" 解除");
+        toastMsg(name+"のBANを解除しました");
+        await systemPost(name+" のBANが解除されました");
       }
     };
 
@@ -259,13 +272,14 @@ window.openAdmin=async ()=>{
   });
 };
 
-/* 表示（完全修正） */
+/* 表示 */
 onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
   posts.innerHTML="";
 
   snap.forEach(d=>{
     const data=d.data();
-    if(isBanned(data.name)) return;
+
+    if(isBanned(data.name) && data.name !== "[システム]") return;
 
     const id=d.id;
 
@@ -281,7 +295,6 @@ onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
     div.appendChild(name);
     div.appendChild(msgEl);
 
-    // システムじゃない場合のみ
     if(data.name !== "[システム]"){
       const liked = data.likes?.includes(currentUser);
 
