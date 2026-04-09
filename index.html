@@ -43,7 +43,6 @@ textarea { width:100%; height:100px; }
   border-radius:8px; opacity:0; transition:0.5s;
 }
 
-/* ⭐ BAN画面 */
 .banScreen{
   position:fixed;
   top:0; left:0;
@@ -104,14 +103,7 @@ const db = getFirestore(app);
 let currentUser = localStorage.getItem("username");
 const adminUser = "Hiromu0623";
 
-/* ⭐ 禁止ワード */
-const badWords = ["死ね","バカ","きも","うざ"];
-
-/* ⭐ ログ */
-let warnLog = JSON.parse(localStorage.getItem("warnLog")||"[]");
-let banLevel = parseInt(localStorage.getItem("banLevel")||"0");
-
-/* ⭐ BAN管理 */
+/* BAN管理 */
 let bannedUsers = [];
 onSnapshot(collection(db,"bans"), snap=>{
   bannedUsers = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -122,27 +114,19 @@ function isBanned(name){
   return bannedUsers.some(b=>b.username===name);
 }
 
-/* ⭐ BAN画面 */
+/* BAN画面 */
 function showBanScreen(text){
   document.body.innerHTML = `<div class="banScreen">${text}</div>`;
 }
 
-/* ⭐ BANチェック */
+/* BANチェック */
 function checkMyBan(){
   if(!currentUser) return;
 
   const b = bannedUsers.find(b=>b.username===currentUser);
   if(!b) return;
 
-  if(!b.until){
-    showBanScreen("あなたは管理者によってバンされました。");
-    return;
-  }
-
-  const remain = Math.max(0, Math.floor((b.until - Date.now())/60000));
-  if(remain > 0){
-    showBanScreen(`あなたはバンされています。残り ${remain} 分`);
-  }
+  showBanScreen("あなたは管理者によってバンされました。");
 }
 
 /* UI */
@@ -232,32 +216,6 @@ window.post=async ()=>{
   if(!currentUser) return toastMsg("ログインしてください");
   if(isBanned(currentUser)) return;
 
-  /* ⭐ 禁止ワードチェック */
-  const now = Date.now();
-  warnLog = warnLog.filter(t=> now - t < 3600000);
-
-  if(badWords.some(w=>msg.value.includes(w))){
-    warnLog.push(now);
-  }
-
-  if(warnLog.length >= 10){
-    banLevel++;
-    let duration = [15,60,1440][banLevel-1];
-    let text = ["15分","1時間","1日"][banLevel-1] || "永久";
-
-    let until = duration ? Date.now()+duration*60000 : null;
-
-    await addDoc(collection(db,"bans"),{username:currentUser,until});
-
-    await systemPost(currentUser+"さんが"+text+"バンされました。");
-
-    showBanScreen("あなたは不快な発言によりバンされました");
-
-    warnLog=[]; 
-    localStorage.setItem("warnLog","[]");
-    return;
-  }
-
   await addDoc(collection(db,"posts"),{
     name:currentUser,
     message:msg.value,
@@ -266,24 +224,6 @@ window.post=async ()=>{
   });
 
   msg.value="";
-};
-
-/* いいね */
-window.like=async(id,btn)=>{
-  if(!currentUser) return;
-
-  const ref=doc(db,"posts",id);
-  const snap=await getDoc(ref);
-
-  let likes=snap.data().likes||[];
-
-  if(likes.includes(currentUser)){
-    likes=likes.filter(u=>u!==currentUser);
-  }else{
-    likes.push(currentUser);
-  }
-
-  await updateDoc(ref,{likes});
 };
 
 /* 管理者 */
@@ -295,9 +235,9 @@ window.openAdmin=async ()=>{
 
   snap.forEach(d=>{
     const name=d.data().username;
-
     const div=document.createElement("div");
 
+    /* BANボタン */
     const banBtn=document.createElement("button");
     banBtn.textContent="BAN";
     banBtn.onclick=async ()=>{
@@ -305,47 +245,23 @@ window.openAdmin=async ()=>{
       await systemPost(name+" がバンされました");
     };
 
+    /* ⭐ BAN解除ボタン */
+    const unbanBtn=document.createElement("button");
+    unbanBtn.textContent="解除";
+    unbanBtn.onclick=async ()=>{
+      const target=bannedUsers.find(b=>b.username===name);
+      if(target){
+        await deleteDoc(doc(db,"bans",target.id));
+        await systemPost(name+" のBANが解除されました");
+      }
+    };
+
     div.textContent=name+" ";
     div.appendChild(banBtn);
+    div.appendChild(unbanBtn);
     userList.appendChild(div);
   });
 };
-
-/* 表示 */
-onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
-  posts.innerHTML="";
-
-  snap.forEach(d=>{
-    const data=d.data();
-    if(isBanned(data.name) && data.name !== "[システム]") return;
-
-    const div=document.createElement("div");
-    div.className="comment";
-
-    const name=document.createElement("b");
-    name.textContent=data.name;
-
-    const msgEl=document.createElement("div");
-    msgEl.textContent=data.message;
-
-    div.appendChild(name);
-    div.appendChild(msgEl);
-
-    if(data.name !== "[システム]"){
-      const likeText=document.createElement("span");
-      likeText.textContent="👍 "+(data.likes?.length||0);
-
-      const likeBtn=document.createElement("button");
-      likeBtn.textContent="いいね";
-      likeBtn.onclick=()=>like(d.id,likeBtn);
-
-      div.appendChild(likeText);
-      div.appendChild(likeBtn);
-    }
-
-    posts.appendChild(div);
-  });
-});
 </script>
 
 </body>
