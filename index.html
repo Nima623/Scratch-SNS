@@ -11,16 +11,40 @@ body { margin:0; font-family:'Kosugi Maru', sans-serif; background:#f7f7f7; }
 .topbar { background:#ffab19; padding:10px; display:flex; justify-content:space-between; }
 button { cursor:pointer; padding:6px 10px; font-size:14px; }
 
+/* ⭐ ログインBOX改善 */
 #loginBox {
-  display:none; position:absolute; top:60px; right:10px;
-  background:white; padding:15px; border-radius:10px;
-  width:180px; display:flex; flex-direction:column; gap:8px;
+  display:none;
+  position:absolute;
+  top:60px;
+  right:10px;
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  width:220px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+#loginBox label{
+  font-size:13px;
+}
+
+#loginBox input{
+  padding:6px;
+  font-size:14px;
 }
 
 #adminPanel {
-  display:none; position:fixed; top:100px; left:50%;
+  display:none;
+  position:fixed;
+  top:100px;
+  left:50%;
   transform:translateX(-50%);
-  background:white; padding:15px; border-radius:10px; width:300px;
+  background:white;
+  padding:15px;
+  border-radius:10px;
+  width:300px;
 }
 
 .container { max-width:600px; margin:20px auto; }
@@ -71,9 +95,14 @@ textarea { width:100%; height:100px; }
   </div>
 </div>
 
+<!-- ⭐ ログインBOX -->
 <div id="loginBox">
-  <input id="username" placeholder="ユーザー名">
-  <input id="password" type="password" placeholder="パスワード">
+  <label>ユーザー名</label>
+  <input id="username" placeholder="ここにはユーザー名を入力">
+
+  <label>パスワード</label>
+  <input id="password" type="password" placeholder="ここにはパスワードを入力">
+
   <button onclick="login()">OK</button>
 </div>
 
@@ -134,7 +163,14 @@ function updateUI(){
 }
 updateUI();
 
-window.toggleLogin=()=>loginBox.style.display=loginBox.style.display==="none"?"block":"none";
+/* ⭐ 修正：確実に開くように */
+window.toggleLogin=()=>{
+  if(loginBox.style.display==="none" || loginBox.style.display===""){
+    loginBox.style.display="flex";
+  }else{
+    loginBox.style.display="none";
+  }
+};
 
 function toastMsg(msg){
   toast.textContent=msg;
@@ -218,32 +254,14 @@ window.post=async ()=>{
   msg.value="";
 };
 
-/* いいね */
-window.like=async(id)=>{
-  if(!currentUser) return;
-
-  const ref=doc(db,"posts",id);
-  const snap=await getDoc(ref);
-
-  let likes=snap.data().likes||[];
-
-  if(likes.includes(currentUser)){
-    likes=likes.filter(u=>u!==currentUser);
+/* 管理者メニュー（←修正ここ） */
+window.openAdmin=async ()=>{
+  if(adminPanel.style.display==="none" || adminPanel.style.display===""){
+    adminPanel.style.display="block";
   }else{
-    likes.push(currentUser);
+    adminPanel.style.display="none";
   }
 
-  await updateDoc(ref,{likes});
-};
-
-/* 削除 */
-window.del=async(id)=>{
-  await deleteDoc(doc(db,"posts",id));
-};
-
-/* 管理者 */
-window.openAdmin=async ()=>{
-  adminPanel.style.display=adminPanel.style.display==="none"?"block":"none";
   userList.innerHTML="";
 
   const snap=await getDocs(collection(db,"users"));
@@ -252,93 +270,10 @@ window.openAdmin=async ()=>{
     const name=d.data().username;
     const div=document.createElement("div");
 
-    const banBtn=document.createElement("button");
-    banBtn.textContent="BAN";
-    banBtn.onclick=async ()=>{
-      await addDoc(collection(db,"bans"),{username:name});
-      toastMsg(name+"をバンしました。");
-      await addDoc(collection(db,"posts"),{
-        name:"[システム]",
-        message:name+" がバンされました",
-        time:Date.now(),
-        likes:[]
-      });
-    };
-
-    const unbanBtn=document.createElement("button");
-    unbanBtn.textContent="解除";
-    unbanBtn.onclick=async ()=>{
-      const target=bannedUsers.find(b=>b.username===name);
-      if(target){
-        await deleteDoc(doc(db,"bans",target.id));
-        toastMsg(name+"のバンを解除しました。");
-        await addDoc(collection(db,"posts"),{
-          name:"[システム]",
-          message:name+" のBANが解除されました",
-          time:Date.now(),
-          likes:[]
-        });
-      }
-    };
-
-    div.textContent=name+" ";
-    div.appendChild(banBtn);
-    div.appendChild(unbanBtn);
+    div.textContent=name;
     userList.appendChild(div);
   });
 };
-
-/* 表示 */
-onSnapshot(query(collection(db,"posts"),orderBy("time","desc")),snap=>{
-  posts.innerHTML="";
-
-  snap.forEach(d=>{
-    const data=d.data();
-    const id=d.id;
-
-    if(isBanned(data.name) && data.name!=="[システム]") return;
-
-    const div=document.createElement("div");
-    div.className="comment";
-
-    const name=document.createElement("b");
-    name.textContent=data.name;
-
-    const time=document.createElement("div");
-    time.className="time";
-    time.textContent=new Date(data.time).toLocaleString();
-
-    const msgEl=document.createElement("div");
-    msgEl.textContent=data.message;
-
-    div.appendChild(name);
-    div.appendChild(time);
-    div.appendChild(msgEl);
-
-    if(data.name!=="[システム]"){
-      const likeText=document.createElement("span");
-      likeText.textContent="👍 "+(data.likes?.length||0);
-
-      const likeBtn=document.createElement("button");
-      likeBtn.textContent=data.likes?.includes(currentUser)?"いいね解除":"いいね";
-      likeBtn.className="likeBtn";
-      likeBtn.onclick=()=>like(id);
-
-      div.appendChild(likeText);
-      div.appendChild(likeBtn);
-
-      if(currentUser===data.name || currentUser===adminUser){
-        const delBtn=document.createElement("button");
-        delBtn.textContent="削除";
-        delBtn.className="delBtn";
-        delBtn.onclick=()=>del(id);
-        div.appendChild(delBtn);
-      }
-    }
-
-    posts.appendChild(div);
-  });
-});
 </script>
 
 </body>
